@@ -1,0 +1,172 @@
+Hi Everyone, Good Morning.
+
+Today I will be taking you through one interesting presentation which is the Realtime Credit Card fraud detection using CDC.
+CDC stands for Change Data Capture which is the method to track data that has been changed by some action.
+
+I will also demonstrate what we have implemented as part of this use case.
+
+But before jumping to the demo, let me give you a quick overview of the reference architecture for CDC - Fraud Detection.
+ 
+So this application is to Identify fraudulent credit card transactions using CDC (Change Data Capture) data source and TensorFlow model 
+
+This reference architecture incorporates the components such as
+CDC (Change Data Capture) Debezium,
+Postgres (Database)
+TensorFlow Model,
+Spring Cloud Data Flow Server.
+MySQL
+Prometheus,
+Influx DB
+Grafana,
+
+So lets understand them one by one,
+
+1.)CDC (Change Data Capture) :
+As its name suggests, Change Data Capture (CDC) techniques are used to identify changes in the database it is connected to (in our usecase it is Postgres db).
+
+Credit card transaction persisted in Postgresdb which generates the change data capture event with help of Debezium connector. 
+
+In this case we use postgresSQL connector.
+
+Debezium supported other connectors are
+
+MongoDB
+MySQL
+PostgreSQL
+SQL Server
+Oracle (Incubating)
+Db2 (Incubating)
+Cassandra (Incubating)
+
+Let me give you short introduction on debezium. 
+
+	- Debezium is an open source distributed platform for change data capture. 
+	- It has db specific connector and that point to database table.
+	-  debezium start responding to all of the inserts, updates, and deletes when application commit record in the databases. 
+	- it capture the real time data change from the database and then create stream message and that has been posted to a stream like Kafka, RabitMQ, etc 
+
+Let me explian how CDC and Debezium is used in our application
+
+	We have Sample Applicaiton - Transaction Generator which is continuously generate credit card transactions.
+	The data format of the transaction compliant with data format required for - Credit Card Fraud Detection.
+	PostgresDB is used in this applicaton to store transactions.
+	So PostgresSQL DB connector that monitor the credit_card_transaction table and that generates the event wheneven changes persisted in this table.
+	So the event then converted into stream message and posted into Kafka stream.
+
+lets move on to next component
+
+3)Spring Cloud Dataflow :
+
+	Spring Cloud Data Flow is a platform to create complex topologies for streaming and batch data pipelines. 
+	The data pipelines consist of Spring Boot applications.
+	These applications are built using the Spring Cloud Stream or Spring Cloud Task with micro service frameworks.
+
+	A flow that receives an event from an input, perform some action(s) and send the result to an output. 
+	From here, we can design more sophisticated and complex pipelines. 
+	The good thing with Spring Cloud Data Flow is that it’s fully integrated with Spring Integration, 
+	so we can implement any message patterns we can achieve with Spring Integration.
+ 
+	The inputs are the Source, the outputs are the Sink and then we have the Processor that consumes the data and returns it to the output. 
+	It can be any of these: a RabbitMQ queue, a Kafka, Amazon Kinesis, Google Pub/Sub, Azure Event, a database … or another component within your pipeline.
+
+	Spring Cloud Dataflow orchestrates the flow of our application in combination with the skipper-server.
+
+
+	In our usecase CDC - Debezium is acting as the source 
+		and TensorFlow model for fraud detection acts as Processor 
+		and the log sink with micrometer is the sink.
+
+	Spring Cloud Dataflow internally uses h2 memory but also lets user to use external database if needed. 
+	In our application we are using MySQL as the database.
+
+Lets talk about the tensorflow model processor.
+
+3.)TensorFlow Model :
+
+	Tensor flow is the  processor which has ML algorithm to analysis the time series data to capture data anomalies. 
+	In this case, credit card transaction which is being validated with ML alogorithm implemented with help of Python, Pandas, Numpy and Scipy Libraries.
+	This is the decider whether the transaction was fraud or normal.
+
+lets go to the final components of this applcation Prometheus and Grafana
+
+3)Prometheus and Grafana :
+
+	Micrometer receives data from processor. 
+		
+	Micrometer which exposes metrics from our application, Prometheus which stores the metric data and Grafana to visualize the data in graphs.
+
+	prometheus-rsocket-proxy which will pull the metrics data from the micrometer and prometheus-rsocket-proxy is between micrometer and Prometheus
+
+	we will use Grafana for data visualization of our metrics.
+
+	Grafana provides a rich UI where you create, explore and share dashboards that contain multiple graphs. 
+
+	InfluxDB is in memory db which resides between Prometheus and Grafana. 
+
+	Influx DB is time series DB which optimized for fast, high availability storage 
+	and retrieval of time series data for operation monitoring, application metrics and real time data analystics.
+
+	Grafana can pull data from various data sources like Prometheus, Elasticsearch, InfluxDB, etc. In this appplication InfluxDB is being used.
+
+Lets see the demo for this application.
+
+i am going to deploy credit card fraud detection application in AWS.
+It is docker based deployment. 
+
+First i will show infrastructure deployment which is based on automated cloud deployment script -terraform script. 
+The script will create the required configuration for application deployment that inlcludes
+
+- VPC
+- Security group
+- Internet gateway
+- Inbound and outboud rules
+- Docker and docker compose deployment
+- Download source from github
+- Pull images and stored in dockerhub
+- Deploy applications
+
+Lets move on to appplication console with public ip 
+
+Login into http://54.147.10.252:3000
+
+don't change the password and let it be default.
+
+now import credit card dashbord. No data displayed and waiting for the data from server.
+
+Now we have to deploy couple of stream micro service applications in spring data flow plaform which will have the core algorithm for data analsysis.
+
+Open url
+	http://52.73.0.88:9393/dashboard/#/streams/definitions
+
+
+Click create Stream link.
+
+
+Copy past the below text
+
+fraud-detection=cdc-debezium --cdc.config.schema.whitelist=cdc --cdc.name=my-sql-connector --cdc.connector=postgres --cdc.config.database.user=postgres --cdc.config.database.password=postgres --cdc.config.database.dbname=postgres --cdc.config.database.hostname=postgres-cdc --cdc.config.database.port=5432 --cdc.config.database.server.name=my-app-connector --cdc.flattering.enabled=true | fraud-detection --model-fetch=output --model='classpath:/fraud_detection_graph.pb' | counter --counter.name=credit --counter.tag.expression.fraud=#jsonPath(payload,'$..detection')
+
+fraud-log=:fraud-detection.fraud-detection > log
+
+and then click create stream button.
+
+Select both application and click deploy option and then Select Default Option.
+
+Deploy both application. Wait for the deploymenet to be completed.
+
+
+Open the transaction generator application to start the credit card transaction
+
+	http://52.73.0.88:8384/generator
+
+
+Adjust fraud percentage, wait time etc.
+
+and then click start button.
+
+Now grafana dashboard would start disaply the transaction details.
+
+
+
+
+
